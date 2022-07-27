@@ -458,6 +458,7 @@ deb-src http://mirrors.aliyun.com/debian-security buster/updates main contrib no
 
 EOF
 
+	${sudoCmd} apt dist-upgrade
 	${sudoCmd} apt-get update
 
 	green " ================================================== "
@@ -2128,9 +2129,19 @@ WantedBy=multi-user.target
 EOF
 
 
-	${sudoCmd} chown root:nobody ${configFrpPath}/${downloadFilenameFRPFolder}/frps
-	${sudoCmd} chown root:nobody ${configFrpPath}/${downloadFilenameFRPFolder}/frpc
-	${sudoCmd} chown root:nobody ${configFrpPathIni}/${installFrpType}.ini
+	if [[ "${osRelease}" == "centos" ]]; then
+		${sudoCmd} chgrp nobody ${configFrpPath}/${downloadFilenameFRPFolder}/frps
+		${sudoCmd} chgrp nobody ${configFrpPath}/${downloadFilenameFRPFolder}/frpc
+		${sudoCmd} chgrp nobody ${configFrpPathIni}/${installFrpType}.ini
+	else
+		${sudoCmd} chgrp nogroup ${configFrpPath}/${downloadFilenameFRPFolder}/frps
+		${sudoCmd} chgrp nogroup ${configFrpPath}/${downloadFilenameFRPFolder}/frpc
+		${sudoCmd} chgrp nogroup ${configFrpPathIni}/${installFrpType}.ini
+	fi
+
+	${sudoCmd} chown root ${configFrpPath}/${downloadFilenameFRPFolder}/frps
+	${sudoCmd} chown root ${configFrpPath}/${downloadFilenameFRPFolder}/frpc
+	${sudoCmd} chown root ${configFrpPathIni}/${installFrpType}.ini
 
 	${sudoCmd} chmod +rx ${configFrpPath}/${downloadFilenameFRPFolder}/frps
 	${sudoCmd} chmod +rx ${configFrpPath}/${downloadFilenameFRPFolder}/frpc
@@ -2160,6 +2171,7 @@ EOF
 	green "    ${installFrpPromptText} 访问日志 ${configFrpLogFile} 或运行 journalctl -n 50 -u ${installFrpType}.service 查看 !"
 	green "    ${installFrpPromptText} 停止命令: systemctl stop ${installFrpType}  启动命令: systemctl start ${installFrpType} "
 	green "    ${installFrpPromptText} 重启命令: systemctl restart ${installFrpType}"
+	green "    ${installFrpPromptText} 查看运行状态: systemctl status ${installFrpType} "
 	green "======================================================================"
 	echo
 
@@ -2211,6 +2223,7 @@ ${installFrpPromptText} 配置路径 ${configFrpPathIni}/${installFrpType}.ini
 
 ${installFrpPromptText} 访问日志 ${configFrpLogFile} 或运行 journalctl -n 50 -u ${installFrpType}.service 查看
 
+${installFrpPromptText} 查看运行状态: systemctl status ${installFrpType} 
 ${installFrpPromptText} 停止命令: systemctl stop ${installFrpType}  
 ${installFrpPromptText} 启动命令: systemctl start ${installFrpType}
 ${installFrpPromptText} 重启命令: systemctl restart ${installFrpType}
@@ -2250,7 +2263,8 @@ ${installFrpPromptText} 配置路径 ${configFrpPathIni}/${installFrpType}.ini
 
 ${installFrpPromptText} 访问日志 ${configFrpLogFile} 或运行 journalctl -n 50 -u ${installFrpType}.service 查看
 
-${installFrpPromptText} 停止命令: systemctl stop ${installFrpType}  
+${installFrpPromptText} 查看运行状态: systemctl status ${installFrpType} 
+${installFrpPromptText} 停止命令: systemctl stop ${installFrpType} 
 ${installFrpPromptText} 启动命令: systemctl start ${installFrpType}
 ${installFrpPromptText} 重启命令: systemctl restart ${installFrpType}
 
@@ -2353,8 +2367,16 @@ function upgradeFRP(){
 	
 	cd ${downloadFilenameFRPFolder}
 
-	${sudoCmd} chown root:nobody ${configFrpPath}/${downloadFilenameFRPFolder}/frps
-	${sudoCmd} chown root:nobody ${configFrpPath}/${downloadFilenameFRPFolder}/frpc
+	if [[ "${osRelease}" == "centos" ]]; then
+		${sudoCmd} chgrp nobody ${configFrpPath}/${downloadFilenameFRPFolder}/frps
+		${sudoCmd} chgrp nobody ${configFrpPath}/${downloadFilenameFRPFolder}/frpc
+	else
+		${sudoCmd} chgrp nogroup ${configFrpPath}/${downloadFilenameFRPFolder}/frps
+		${sudoCmd} chgrp nogroup ${configFrpPath}/${downloadFilenameFRPFolder}/frpc
+	fi
+
+	${sudoCmd} chown root ${configFrpPath}/${downloadFilenameFRPFolder}/frps
+	${sudoCmd} chown root ${configFrpPath}/${downloadFilenameFRPFolder}/frpc
 
 	${sudoCmd} chmod 777 ${configFrpPath}/${downloadFilenameFRPFolder}/frps
 	${sudoCmd} chmod 777 ${configFrpPath}/${downloadFilenameFRPFolder}/frpc
