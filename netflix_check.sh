@@ -86,7 +86,7 @@ function testNetflixAll(){
 
     elif [[ $1 == "ipv4warp" ]]; then
 
-        read -p "是否测试本机 IPv4 WARP Sock5 代理? 直接回车默认不测试 请输入[y/N]:" isIpv4WARPContinueInput
+        read -r -p "是否测试本机 IPv4 WARP Sock5 代理? 直接回车默认不测试 请输入[y/N]:" isIpv4WARPContinueInput
         isIpv4WARPContinueInput=${isIpv4WARPContinueInput:-n}
 
         if [[ ${isIpv4WARPContinueInput} == [Nn] ]]; then
@@ -106,7 +106,7 @@ function testNetflixAll(){
 
         if [[ "${isIPV6Enabled}" == "false" ]]; then
             red " 本机IPv6 没有开启 是否继续测试IPv6 "
-            read -p "是否继续测试IPv6? 直接回车默认不继续测试 请输入[y/N]:" isIpv6ContinueInput
+            read -r -p "是否继续测试IPv6? 直接回车默认不继续测试 请输入[y/N]:" isIpv6ContinueInput
             isIpv6ContinueInput=${isIpv6ContinueInput:-n}
 
             if [[ ${isIpv6ContinueInput} == [Nn] ]]; then
@@ -180,7 +180,12 @@ function testNetflixOneMethod(){
 
         if [ "${resultIndex}" == "Not Available" ];then
             red " Netflix 不提供此地区服务 "
-            return
+            if [[  "$isAutoRefreshWarp" == "true" ]]; then
+                echo
+            else
+                return
+            fi
+            
         fi
 
 
@@ -212,6 +217,7 @@ function testNetflixOneMethod(){
         result4=$($1 -S "https://www.netflix.com/title/70283261" 2>&1)
         result5=$($1 -S "https://www.netflix.com/title/70143860" 2>&1)
         result6=$($1 -S "https://www.netflix.com/title/70202589" 2>&1)
+        result7=$($1 -S "https://www.netflix.com/title/70305903" 2>&1)
 
         if [[ "$result1" == *"page-404"* ]] && [[ "$result2" == *"page-404"* ]] && [[ "$result3" == *"page-404"* ]] && [[ "$result4" == *"page-404"* ]] && [[ "$result5" == *"page-404"* ]] && [[ "$result6" == *"page-404"* ]]; then
             yellow " 本机 $2 仅解锁 Netflix 自制剧, 无法播放非自制剧. 区域: ${netflixRegion}"
@@ -325,9 +331,7 @@ function autoRefreshWarpIP(){
 function testYoutubeAll(){
 #    curlCommand="curl --connect-timeout 10 -s --user-agent ${UA_Browser}"
     curlCommand="curl --connect-timeout 10 -s"
-
     curlInfo="IPv4"
-
 
     if [[ $1 == "ipv4" ]]; then
         bold " 开始测试本机的IPv4 解锁 Youtube Premium 情况"
@@ -349,7 +353,7 @@ function testYoutubeAll(){
 
     elif [[ $1 == "ipv6" ]]; then
 
-        if [[ "${isIPV6Enabled}"=="false" ]]; then
+        if [[ "${isIPV6Enabled}" == "false" ]]; then
 
             if [[ ${isIpv6ContinueInput} == [Nn] ]]; then
                 red " 已退出 本机IPv6 测试 "
@@ -426,6 +430,184 @@ function testYoutubeOneMethod(){
 
 
 
+
+
+
+
+
+
+
+
+
+
+function testDisneyPlusAll(){
+    curlCommand="curl --connect-timeout 10 -s --user-agent ${UA_Browser}"
+    # curlCommand="curl --connect-timeout 10 -s"
+    curlInfo="IPv4"
+
+    if [[ $1 == "ipv4" ]]; then
+        bold " 开始测试本机的IPv4 解锁 Disney+ 情况"
+        curlCommand="${curlCommand} -4"
+        curlInfo="IPv4"
+
+    elif [[ $1 == "ipv4warp" ]]; then
+
+        if [[ ${isIpv4WARPContinueInput} == [Nn] ]]; then
+            red " 已退出本机 IPv4 WARP Sock5 代理测试"
+            echo
+            return
+        else
+
+            bold " 开始测试本机的IPv4 通过CloudFlare WARP 解锁 Disney+ 情况"
+            curlCommand="${curlCommand} -x socks5h://127.0.0.1:${warpPortInput}"
+            curlInfo="IPv4 CloudFlare WARP"
+        fi
+
+    elif [[ $1 == "ipv6" ]]; then
+
+        if [[ "${isIPV6Enabled}" == "false" ]]; then
+
+            if [[ ${isIpv6ContinueInput} == [Nn] ]]; then
+                red " 已退出 本机IPv6 测试 "
+                echo
+                return
+            else
+                bold " 开始测试本机的IPv6 解锁 Disney+ 情况"
+                curlCommand="${curlCommand} -6"
+                curlInfo="IPv6"
+            fi
+        else
+                bold " 开始测试本机的IPv6 解锁 Disney+ 情况"
+                curlCommand="${curlCommand} -6"
+                curlInfo="IPv6"
+
+        fi
+
+    elif [[ $1 == "ipv6warp" ]]; then
+        bold " 开始测试本机的IPv6 通过CloudFlare WARP 解锁 Disney+ 情况"
+        curlCommand="${curlCommand} -6"
+        curlInfo="IPv6 CloudFlare WARP"
+
+    else
+        red " 没有选择要进行的测试 已退出! "
+        return
+
+    fi
+
+    # curl 参数说明
+    # --connect-timeout <seconds> Maximum time allowed for connection
+    # -4, --ipv4          Resolve names to IPv4 addresses
+    # -s, --silent        Silent mode
+    # -S, --show-error    Show error even when -s is used
+    # -L, --location      Follow redirects
+
+    testDisneyPlusOneMethod "${curlCommand}" "${curlInfo}"
+    echo
+
+}
+
+function testDisneyPlusOneMethod(){
+
+    if [[ -n "$1" ]]; then
+
+        disneyLinkPrepare="https://disney.api.edge.bamgrid.com/devices"
+        disneyLinkRed="https://www.disneyplus.com/movies/thor-the-dark-world/ZHk7aM5xTbW7"
+
+#        green " Test Url: $1 ${disneyLinkRed}"
+
+        resultDisneyPlusIndex=$($1 --max-time 10 -S -X POST "${disneyLinkPrepare}" -H "authorization: Bearer ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiRA81oLHkDZfu5L3CKadnefEAY84" -H "content-type: application/json; charset=UTF-8" -d '{"deviceFamily":"browser","applicationRuntime":"chrome","deviceProfile":"windows","attributes":{}}' 2>&1)
+  
+        if [[ "${resultDisneyPlusIndex}" == "curl"* ]];then
+            red " 网络错误 无法打开 Disney+ 网站"
+            return
+        fi
+
+        local PreDisneyCookie=$(curl -s --max-time 10 "https://raw.githubusercontent.com/lmc999/RegionRestrictionCheck/main/cookies" | sed -n '1p')
+        
+        #resultYoutube=$(curl --connect-timeout 10 https://www.disneyplus.com/movies/thor-the-dark-world/ZHk7aM5xTbW7 | grep 'The Dark World' )
+        resultYoutube=$($1 ${disneyLinkRed} | grep 'The Dark World' )
+
+        if [  -z "${resultYoutube}" ]; then
+            yellow " 无法打开 Disney Plus 影片"
+        else
+            green " 本机 $2 支持观看 Disney Plus 影片"
+        fi
+
+    else
+        red " 要进行的测试 Url为空! "
+    fi
+
+}
+
+
+function MediaUnlockTest_DisneyPlus() {
+    echo -n -e " Disney+:\t\t\t\t->\c"
+    local PreAssertion=$(curl $useNIC $xForward -${1} --user-agent "${UA_Browser}" -s --max-time 10 -X POST "https://disney.api.edge.bamgrid.com/devices" -H "authorization: Bearer ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiRA81oLHkDZfu5L3CKadnefEAY84" -H "content-type: application/json; charset=UTF-8" -d '{"deviceFamily":"browser","applicationRuntime":"chrome","deviceProfile":"windows","attributes":{}}' 2>&1)
+    if [[ "$PreAssertion" == "curl"* ]] && [[ "$1" == "6" ]]; then
+        echo -n -e "\r Disney+:\t\t\t\t${Font_Red}IPv6 Not Support${Font_Suffix}\n"
+        return
+    elif [[ "$PreAssertion" == "curl"* ]]; then
+        echo -n -e "\r Disney+:\t\t\t\t${Font_Red}Failed (Network Connection)${Font_Suffix}\n"
+        return
+    fi
+
+    local assertion=$(echo $PreAssertion | python -m json.tool 2>/dev/null | grep assertion | cut -f4 -d'"')
+    local PreDisneyCookie=$(curl -s --max-time 10 "https://raw.githubusercontent.com/lmc999/RegionRestrictionCheck/main/cookies" | sed -n '1p')
+    local disneycookie=$(echo $PreDisneyCookie | sed "s/DISNEYASSERTION/${assertion}/g")
+    local TokenContent=$(curl $useNIC $xForward -${1} --user-agent "${UA_Browser}" -s --max-time 10 -X POST "https://disney.api.edge.bamgrid.com/token" -H "authorization: Bearer ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiRA81oLHkDZfu5L3CKadnefEAY84" -d "$disneycookie")
+    local isBanned=$(echo $TokenContent | python -m json.tool 2>/dev/null | grep 'forbidden-location')
+    local is403=$(echo $TokenContent | grep '403 ERROR')
+
+    if [ -n "$isBanned" ] || [ -n "$is403" ]; then
+        echo -n -e "\r Disney+:\t\t\t\t${Font_Red}No${Font_Suffix}\n"
+        return
+    fi
+
+    local fakecontent=$(curl -s --max-time 10 "https://raw.githubusercontent.com/lmc999/RegionRestrictionCheck/main/cookies" | sed -n '8p')
+    local refreshToken=$(echo $TokenContent | python -m json.tool 2>/dev/null | grep 'refresh_token' | awk '{print $2}' | cut -f2 -d'"')
+    local disneycontent=$(echo $fakecontent | sed "s/ILOVEDISNEY/${refreshToken}/g")
+    local tmpresult=$(curl $useNIC $xForward -${1} --user-agent "${UA_Browser}" -X POST -sSL --max-time 10 "https://disney.api.edge.bamgrid.com/graph/v1/device/graphql" -H "authorization: ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiRA81oLHkDZfu5L3CKadnefEAY84" -d "$disneycontent" 2>&1)
+    local previewcheck=$(curl $useNIC $xForward -${1} -s -o /dev/null -L --max-time 10 -w '%{url_effective}\n' "https://disneyplus.com" | grep preview)
+    local isUnabailable=$(echo $previewcheck | grep 'unavailable')
+    local region=$(echo $tmpresult | python -m json.tool 2>/dev/null | grep 'countryCode' | cut -f4 -d'"')
+    local inSupportedLocation=$(echo $tmpresult | python -m json.tool 2>/dev/null | grep 'inSupportedLocation' | awk '{print $2}' | cut -f1 -d',')
+
+    if [[ "$region" == "JP" ]]; then
+        echo -n -e "\r Disney+:\t\t\t\t${Font_Green}Yes (Region: JP)${Font_Suffix}\n"
+        return
+    elif [ -n "$region" ] && [[ "$inSupportedLocation" == "false" ]] && [ -z "$isUnabailable" ]; then
+        echo -n -e "\r Disney+:\t\t\t\t${Font_Yellow}Available For [Disney+ $region] Soon${Font_Suffix}\n"
+        return
+    elif [ -n "$region" ] && [ -n "$isUnavailable" ]; then
+        echo -n -e "\r Disney+:\t\t\t\t${Font_Red}No${Font_Suffix}\n"
+        return
+    elif [ -n "$region" ] && [[ "$inSupportedLocation" == "true" ]]; then
+        echo -n -e "\r Disney+:\t\t\t\t${Font_Green}Yes (Region: $region)${Font_Suffix}\n"
+        return
+    elif [ -z "$region" ]; then
+        echo -n -e "\r Disney+:\t\t\t\t${Font_Red}No${Font_Suffix}\n"
+        return
+    else
+        echo -n -e "\r Disney+:\t\t\t\t${Font_Red}Failed${Font_Suffix}\n"
+        return
+    fi
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 function startNetflixTest(){
 
     echo
@@ -453,6 +635,12 @@ function startNetflixTest(){
         testYoutubeAll "ipv4"
         testYoutubeAll "ipv6"
         testYoutubeAll "ipv4warp"
+
+        green " ===== Disney+ 准备开始检测 ====="
+
+        testDisneyPlusAll "ipv4"
+        testDisneyPlusAll "ipv6"
+        testDisneyPlusAll "ipv4warp"
 
     fi    
 }

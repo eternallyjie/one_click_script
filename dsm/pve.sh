@@ -162,13 +162,14 @@ function getLinuxOSRelease(){
         fi
 	fi
 
-
+	pveVersion=$(pveversion | grep pve-manager | awk -F '/' '{print $2}')
+	pveVersionShort=$(pveversion | grep pve-manager | awk -F '/' '{print $2}' | awk -F '.' '{print $1}')
 
     [[ -z $(echo $SHELL|grep zsh) ]] && osSystemShell="bash" || osSystemShell="zsh"
 
 	checkArchitecture
 	checkCPU
-    green " Status 系统信息:  ${osRelease}, ${osReleaseVersionNo}, ${osReleaseVersionCodeName}, ${osSystemShell}, ${osSystemPackage}, ${osCPU} CPU ${osArchitecture}"
+    green " Status 系统信息:  ${osRelease}, ${osReleaseVersionNo}, ${osReleaseVersionCodeName}, ${osSystemShell}, ${osSystemPackage}, ${osCPU} CPU ${osArchitecture}, PVE ${pveVersion}"
 }
 
 
@@ -431,36 +432,67 @@ function updatePVEAptSource(){
 	if [[ -n "${isPVESystem}" ]]; then 
 		green " 准备关闭企业更新源, 添加非订阅版更新源 "
 		${sudoCmd} sed -i 's|deb https://enterprise.proxmox.com/debian/pve buster pve-enterprise|#deb https://enterprise.proxmox.com/debian/pve buster pve-enterprise|g' /etc/apt/sources.list.d/pve-enterprise.list
+		${sudoCmd} sed -i 's|deb https://enterprise.proxmox.com/debian/pve bullseye pve-enterprise|#deb https://enterprise.proxmox.com/debian/pve bullseye pve-enterprise|g' /etc/apt/sources.list.d/pve-enterprise.list
 
 		#echo 'deb http://download.proxmox.com/debian/pve buster pve-no-subscription' > /etc/apt/sources.list.d/pve-no-subscription.list
-		echo "deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian buster pve-no-subscription" > /etc/apt/sources.list.d/pve-no-subscription.list
+		echo "deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian ${osReleaseVersionCodeName} pve-no-subscription" > /etc/apt/sources.list.d/pve-no-subscription.list
 
-		wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
+		if [[ "${pveVersionShort}" == "6" ]] ; then
+			wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
+		else
+			wget https://enterprise.proxmox.com/debian/proxmox-release-bullseye.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
+		fi
+		
+		
 	fi
 
 
 
 	cp /etc/apt/sources.list /etc/apt/sources.list.bak
+	
+	if [[ "$osReleaseVersionNo" == "11" ]]; then
+		cat > /etc/apt/sources.list <<-EOF
 
-	cat > /etc/apt/sources.list <<-EOF
+deb http://mirrors.aliyun.com/debian/ ${osReleaseVersionCodeName} main contrib non-free
+deb-src http://mirrors.aliyun.com/debian/ ${osReleaseVersionCodeName} main contrib non-free
 
-deb http://mirrors.aliyun.com/debian/ buster main contrib non-free
-deb-src http://mirrors.aliyun.com/debian/ buster main contrib non-free
+deb http://mirrors.aliyun.com/debian/ ${osReleaseVersionCodeName}-updates main contrib non-free
+deb-src http://mirrors.aliyun.com/debian/ ${osReleaseVersionCodeName}-updates main contrib non-free
 
-deb http://mirrors.aliyun.com/debian/ buster-updates main contrib non-free
-deb-src http://mirrors.aliyun.com/debian/ buster-updates main contrib non-free
+deb http://mirrors.aliyun.com/debian/ ${osReleaseVersionCodeName}-backports main contrib non-free
+deb-src http://mirrors.aliyun.com/debian/ ${osReleaseVersionCodeName}-backports main contrib non-free
 
-deb http://mirrors.aliyun.com/debian/ buster-backports main contrib non-free
-deb-src http://mirrors.aliyun.com/debian/ buster-backports main contrib non-free
-
-deb http://mirrors.aliyun.com/debian-security buster/updates main contrib non-free
-deb-src http://mirrors.aliyun.com/debian-security buster/updates main contrib non-free
+deb https://mirrors.aliyun.com/debian-security/ bullseye-security main
+deb-src https://mirrors.aliyun.com/debian-security/ bullseye-security main
 
 EOF
+	else
+
+		cat > /etc/apt/sources.list <<-EOF
+
+deb http://mirrors.aliyun.com/debian/ ${osReleaseVersionCodeName} main contrib non-free
+deb-src http://mirrors.aliyun.com/debian/ ${osReleaseVersionCodeName} main contrib non-free
+
+deb http://mirrors.aliyun.com/debian/ ${osReleaseVersionCodeName}-updates main contrib non-free
+deb-src http://mirrors.aliyun.com/debian/ ${osReleaseVersionCodeName}-updates main contrib non-free
+
+deb http://mirrors.aliyun.com/debian/ ${osReleaseVersionCodeName}-backports main contrib non-free
+deb-src http://mirrors.aliyun.com/debian/ ${osReleaseVersionCodeName}-backports main contrib non-free
+
+deb http://mirrors.aliyun.com/debian-security ${osReleaseVersionCodeName}/updates main
+deb-src http://mirrors.aliyun.com/debian-security ${osReleaseVersionCodeName}/updates main
+
+
+EOF
+
+	fi
+
+
 
 	${sudoCmd} apt dist-upgrade
 	${sudoCmd} apt-get update
 
+	apt install -y vim
 	green " ================================================== "
 	green " 更新源成功 "
 	green " ================================================== "
@@ -480,19 +512,31 @@ EOF
 
 }
 
+function setIPOPENWRT(){
+	green " ================================================== "
+	green " 请输入OpenWRT Lan 的IP地址"
+	echo
+	read -r -p "Please input IP address of LAN (default:192.168.7.1) :" IPOpenWRTInput
+	IPOpenWRTInput=${IPOpenWRTInput:-192.168.7.1}
 
+	configOpenWRTIP="/etc/config/network"
 
+	vi ${configOpenWRTIP}
+
+}
 
 function setPVEIP(){
 	# https://pve.proxmox.com/pve-docs/chapter-sysadmin.html#sysadmin_network_configuration
 
 	green " ================================================== "
-
 	green " 请选择使用静态IP模式还是DHCP自动获取IP模式, 直接回车默认静态IP模式 "
-	read -p "Choose IP Mode: DHCP(y) or Static(n) ? (default: static ip) Pls Input [y/N]:" IPModeInput
+	echo
+	read -r -p "Choose IP Mode: DHCP(y) or Static(n) ? (default: static ip) Pls Input [y/N]:" IPModeInput
 	IPModeInput=${IPModeInput:-n}
+	echo
 	green " 请输入指定的IP地址, 如果已选择了DHCP模式 输入的IP不是实际的IP地址,仅作为在开机欢迎语中的IP显示"
-	read -p "Please input IP address of your n3450 computer (default:192.168.7.200) :" IPInput
+	echo
+	read -r -p "Please input IP address of your n3450 computer (default:192.168.7.200) :" IPInput
 
 	if [[ $IPModeInput == [Yy] ]]; then
     cat > /etc/network/interfaces <<-EOF
@@ -586,8 +630,9 @@ sed -i -e "s/[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}/${IPInput}/g
 
  
 function lvextendDevRoot(){
-	echo "准备把剩余空间扩容给 /dev/pve/root 或 /dev/pve/data"
-
+	echo
+	green "准备把剩余空间扩容给 /dev/pve/root 或 /dev/pve/data"
+	echo
 	read -p "是否把剩余空间都扩容到/dev/pve/root 或 /dev/pve/data, 否为不处理扩容空间. 直接回车默认为是, 请输入[Y/n]:" isExtendDevRootInput
 	isExtendDevRootInput=${isExtendDevRootInput:-Y}
 	
@@ -655,9 +700,9 @@ function deleteVGLVPVEData(){
 	green " ================================================== "
 	green " 准备删除 /dev/pve/data 逻辑卷, 得到的空间都会增加给/dev/pve/root "
 
-	cp /etc/pve/storage.cfg /etc/pve/storage.cfg.bak
+	${sudoCmd} cp -f /etc/pve/storage.cfg /etc/pve/storage.cfg.bak2
 
-	${sudoCmd} sed -i 's|content iso,vztmpl,backup|content backup,vztmpl,snippets,iso,images,rootdir|g' /etc/pve/storage.cfg
+	${sudoCmd} sed -i 's|content iso,vztmpl,backup|content iso,vztmpl,backup,snippets,images,rootdir|g' /etc/pve/storage.cfg
 
 	${sudoCmd} sed -i '/lvmthin/d' /etc/pve/storage.cfg
 	${sudoCmd} sed -i '/thinpool data/d' /etc/pve/storage.cfg
@@ -665,8 +710,14 @@ function deleteVGLVPVEData(){
 	${sudoCmd} sed -i '/content rootdir,images/d' /etc/pve/storage.cfg
 
 
-	green " 请重启后 继续运行本脚本选择 第2项 继续完成删除"
-	lvremove /dev/pve/data
+	green " 请重启后 继续运行本脚本选择 第3项 继续完成删除"
+
+	read -p "是否立即重启? 请输入[Y/n]:" isRebootInput
+	isRebootInput=${isRebootInput:-Y}
+
+	if [[ $isRebootInput == [Yy] ]]; then
+		${sudoCmd} reboot
+	fi
 
 	echo "free"
 	free
@@ -1066,26 +1117,34 @@ function genPVEVMDiskWithQM(){
 	img2kvmPath="./img2kvm"
 	img2kvmRealPath="./img2kvm"
 
-	if [ -z $1 ]; then
+	importFile="synoboot.img"
+	importTextPrompt="群晖"
+
+	if [[ $2 == "openwrt" ]]; then
+		importFile="openwrt.img"
+		importTextPrompt="OpenWRT"
+	fi
+
+	if [[ $1 == "qm" ]]; then
 		green " ================================================== "
-		green " 准备使用 qm importdisk 命令 导入群晖引导镜像文件 synoboot.img "
-		red " 请先通过 PVE网页上传 群晖引导镜像文件syboboot.img 到local存储盘"
-		red " 通过 PVE 网页上传成功后 文件路径一般为 /var/lib/vz/template/iso/synoboot.img"
+		green " 准备使用 qm importdisk 命令 导入${importTextPrompt}引导镜像文件 ${importFile} "
+		red " 请先通过 PVE网页上传 ${importTextPrompt}引导镜像文件 ${importFile} 到local存储盘"
+		red " 通过 PVE 网页上传成功后 文件路径一般为 /var/lib/vz/template/iso/${importFile}"
 		echo
-		red " 或者通过SSH WinSCP等软件上传 群晖引导镜像文件syboboot.img 到 /root 目录或用户指定目录下"
+		red " 或者通过SSH WinSCP等软件上传 ${importTextPrompt}引导镜像文件 ${importFile} 到 /root 目录或用户指定目录下"
 		green " ================================================== "
 
 		promptTextDefaultDsmBootImgFilePath="/var/lib/vz/template/iso"
 		promptTextFailureCommand="img2kvm"
 	else 
 		green " ================================================== "
-		green " 准备使用 img2kvm 命令 导入群晖引导镜像文件 synoboot.img "
+		green " 准备使用 img2kvm 命令 导入${importTextPrompt}引导镜像文件 synoboot.img "
 		green " 可通过SSH WinSCP等软件上传 img2kvm 工具到当前目录下或/root目录下, 如果用户没有上传会自动从网上下载该命令 "
 		echo
-		red " 请先通过通过SSH WinSCP等软件上传 群晖引导镜像文件syboboot.img 到 /root 目录或用户指定目录下"
+		red " 请先通过通过SSH WinSCP等软件上传 ${importTextPrompt}引导镜像文件 ${importFile} 到 /root 目录或用户指定目录下"
 		echo
-		red " 或者通过PVE 网页上传 群晖引导镜像文件syboboot.img 到local存储盘"
-		red " 通过 PVE 网页上传成功后 文件路径一般为 /var/lib/vz/template/iso/synoboot.img"
+		red " 或者通过PVE 网页上传 ${importTextPrompt}引导镜像文件 ${importFile} 到local存储盘"
+		red " 通过 PVE 网页上传成功后 文件路径一般为 /var/lib/vz/template/iso/${importFile}"
 		green " ================================================== "	
 
 		promptTextDefaultDsmBootImgFilePath="/root"
@@ -1109,11 +1168,11 @@ function genPVEVMDiskWithQM(){
 
 
 
-	read -p "请输入已上传的群晖引导镜像文件名, 直接回车默认为 synoboot.img :" dsmBootImgFilenameInput
-	dsmBootImgFilenameInput=${dsmBootImgFilenameInput:-"synoboot.img"}
+	read -p "请输入已上传的${importTextPrompt}引导镜像文件名, 直接回车默认为 ${importFile} :" dsmBootImgFilenameInput
+	dsmBootImgFilenameInput=${dsmBootImgFilenameInput:-"${importFile}"}
 
-	read -p "请输入虚拟机ID, 直接回车默认为101 请输入:" dsmBootImgVMIdInput
-	dsmBootImgVMIdInput=${dsmBootImgVMIdInput:-101}
+	read -p "请输入虚拟机ID, 直接回车默认为100 请输入:" dsmBootImgVMIdInput
+	dsmBootImgVMIdInput=${dsmBootImgVMIdInput:-100}
 
 	if [[ -f "/root/${dsmBootImgFilenameInput}" ]]; then
         dsmBootImgFileRealPath="/root/${dsmBootImgFilenameInput}"
@@ -1122,72 +1181,82 @@ function genPVEVMDiskWithQM(){
         dsmBootImgFileRealPath="/var/lib/vz/template/iso/${dsmBootImgFilenameInput}"
 
 	else
-		read -p "请输入已上传的群晖引导镜像的路径, 直接回车默认为${promptTextDefaultDsmBootImgFilePath} : (末尾不要有/)" dsmBootImgFilePathInput
+		read -p "请输入已上传的${importTextPrompt}引导镜像的路径, 直接回车默认为${promptTextDefaultDsmBootImgFilePath} : (末尾不要有/)" dsmBootImgFilePathInput
 		dsmBootImgFilePathInput=${dsmBootImgFilePathInput:-"${promptTextDefaultDsmBootImgFilePath}"}
 
 		if [[ -f "${dsmBootImgFilePathInput}/${dsmBootImgFilenameInput}" ]]; then
 			dsmBootImgFileRealPath="${dsmBootImgFilePathInput}/${dsmBootImgFilenameInput}"
 		else
 			green " ================================================== "
-			red " 没有找到已上传的群晖引导镜像文件 ${dsmBootImgFilePathInput}/${dsmBootImgFilenameInput}"
+			red " 没有找到已上传的${importTextPrompt}引导镜像文件 ${dsmBootImgFilePathInput}/${dsmBootImgFilenameInput}"
 			green " ================================================== "
 			exit
 		fi
     fi   
 
-
-	green " 开始导入群晖引导镜像文件 ${dsmBootImgFileRealPath} "
-	green " 引导镜像导入后, 默认储存在名称为local-lvm磁盘, 如果没有local-lvm盘 依次会导入到local盘储存, 也可储存在用户指定的磁盘 "
+	echo
+	echo
+	green " 开始导入${importTextPrompt}引导镜像文件 ${dsmBootImgFileRealPath} "
+	green " 引导镜像导入后, 默认储存在名称为local-lvm逻辑盘, 如果没有local-lvm盘 依次会导入到local盘储存, 也可储存在用户指定的逻辑盘 "
 
 	isHaveStorageLocalLvm=$(cat /etc/pve/storage.cfg | grep local-lvm) 
 	isHaveStorageLocal=$(cat /etc/pve/storage.cfg | grep local) 
 
 
 	echo
-	echo "cat /etc/pve/storage.cfg"
+	echo
+	green " 当前PVE存储盘如下 (cat /etc/pve/storage.cfg) : "
+	echo
 	cat /etc/pve/storage.cfg
-	read -p "根据上面已有的磁盘信息, 输入要导入后储存到的磁盘名称, 直接回车默认为local-lvm,  请输入:" dsmBootImgStoragePathInput
+	echo
+	read -r -p "根据上面已有的存储盘信息, 输入要导入后储存到的存储盘名称, 直接回车默认为local-lvm, 请输入:" dsmBootImgStoragePathInput
 	dsmBootImgStoragePathInput=${dsmBootImgStoragePathInput:-"local-lvm"}
 
+	echo
+	echo
 	isHaveStorageUserInput=$(cat /etc/pve/storage.cfg | grep ${dsmBootImgStoragePathInput}) 
 
 	if [[ -n "$isHaveStorageUserInput" ]]; then	
-		green " 状态显示--系统有 储存盘 ${isHaveStorageUserInput}"
+		green " 状态显示--系统有 存储盘 ${isHaveStorageUserInput}"
 
 	elif [[ -n "$isHaveStorageLocalLvm" ]]; then	
-		green " 状态显示--系统没有 储存盘 ${isHaveStorageUserInput} 使用储存盘 local-lvm 代替"
+		green " 状态显示--系统没有 存储盘 ${isHaveStorageUserInput} 使用存储盘 local-lvm 代替"
 		dsmBootImgStoragePathInput="local-lvm"
 
 	elif [[ -n "$isHaveStorageLocal" ]]; then	
-		green " 状态显示--系统没有 储存盘 local-lvm, 使用储存盘 local 代替"
+		green " 状态显示--系统没有 存储盘 local-lvm, 使用存储盘 local 代替"
 		dsmBootImgStoragePathInput="local"
 	fi
 
 
-
+	echo
 	if [[ -f ${dsmBootImgFileRealPath} ]]; then
 		
 		dsmBootImgResult=""
 		
-		if [ -z $1 ]; then
+		if [[ $1 == "qm" ]]; then
 			echo "qm importdisk ${dsmBootImgVMIdInput} ${dsmBootImgFileRealPath} ${dsmBootImgStoragePathInput}"
+			echo
 			dsmBootImgResult=$(qm importdisk ${dsmBootImgVMIdInput} ${dsmBootImgFileRealPath} ${dsmBootImgStoragePathInput})
 
 		else
 			echo " ${img2kvmRealPath} ${dsmBootImgFileRealPath} ${dsmBootImgVMIdInput} ${dsmBootImgStoragePathInput}"
+			echo
 			dsmBootImgResult=$(${img2kvmRealPath} ${dsmBootImgFileRealPath} ${dsmBootImgVMIdInput} ${dsmBootImgStoragePathInput})
 
 		fi
 
+		echo
 		echo "${dsmBootImgResult}"
-
+		echo
+		
 		isImportStorageSuccess=$(echo ${dsmBootImgResult} | grep "Successfully") 
 
 		if [[ -n "$isImportStorageSuccess" ]]; then	
-			green " 成功导入 群晖引导镜像文件! 请运行虚拟机继续安装群晖! "
+			green " 成功导入 ${importTextPrompt}镜像文件! 请运行虚拟机继续安装${importTextPrompt}! "
 		else 
 			green " ================================================== "
-			red " 导入失败 请重新导入群晖引导镜像文件 ${dsmBootImgFileRealPath}"
+			red " 导入失败 请重新导入${importTextPrompt}镜像文件 ${dsmBootImgFileRealPath}"
 			red " 导入失败 或尝试用 ${promptTextFailureCommand} 命令重新导入"
 			green " ================================================== "
 			exit
@@ -2596,6 +2665,9 @@ function start_menu(){
     green " 9. 检测系统是否开启显卡直通"
     green " 10. 显示系统信息 用于查看直通设备"
 	echo
+	green " 11. 修改OpenWRT 系统的IP地址和网关地址"
+	green " 14. PVE安装OpenWRT 使用 qm importdisk 命令导入镜像文件openwrt.img, 生成硬盘设备"
+	echo
 	green " 15. PVE安装群晖 使用 qm importdisk 命令导入引导文件synoboot.img, 生成硬盘设备"
 	green " 16. PVE安装群晖 使用 img2kvm 命令导入引导文件synoboot.img, 生成硬盘设备"
 	green " 17. PVE安装群晖 使用 qm set 命令添加整个硬盘(直通) 生成硬盘设备"
@@ -2645,11 +2717,17 @@ function start_menu(){
         10 )
             displayIOMMUInfo
         ;;
+        11 )
+            setIPOPENWRT
+        ;;			
+        14)
+            genPVEVMDiskWithQM "qm" "openwrt"
+        ;;		
         15 )
-            genPVEVMDiskWithQM
+            genPVEVMDiskWithQM "qm"
         ;;
         16 )
-            genPVEVMDiskWithQM "Img2kvm"
+            genPVEVMDiskWithQM "img2kvm"
         ;;
         17 )
             genPVEVMDiskPT
